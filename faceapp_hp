@@ -1,0 +1,130 @@
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <string>
+#include <sstream>
+
+int main() {
+    setlocale(LC_ALL, "Russian");
+
+    std::string video_path;
+    std::cout << "Введите путь к видеофайлу: ";
+    std::getline(std::cin, video_path);
+
+    cv::CascadeClassifier face_cascade, plate_cascade, car_cascade, pedestrian_cascade;
+    if (!face_cascade.load("C:\\Users\\Пользователь\\Downloads\\haarcascade_frontalface_default.xml")) {
+        std::cerr << "Ошибка загрузки классификатора для лиц!" << std::endl;
+        return -1;
+    }
+    if (!plate_cascade.load("C:\\Users\\Пользователь\\Downloads\\haarcascade_russian_plate_number.xml")) {
+        std::cerr << "Ошибка загрузки классификатора для номеров машин!" << std::endl;
+        return -1;
+    }
+    if (!car_cascade.load("C:\\Users\\Пользователь\\Downloads\\haarcascade_car.xml")) {
+        std::cerr << "Ошибка загрузки классификатора для автомобилей!" << std::endl;
+        return -1;
+    }
+    if (!pedestrian_cascade.load("C:\\Users\\Пользователь\\Downloads\\haarcascade_fullbody.xml")) {
+        std::cerr << "Ошибка загрузки классификатора для пешеходов!" << std::endl;
+        return -1;
+    }
+
+    cv::VideoCapture capture(video_path);
+    if (!capture.isOpened()) {
+        std::cerr << "Не удалось открыть видео файл!" << std::endl;
+        return -1;
+    }
+
+    int frame_width = capture.get(cv::CAP_PROP_FRAME_WIDTH);
+    int frame_height = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
+    int fps = capture.get(cv::CAP_PROP_FPS);
+
+    size_t pos = video_path.find_last_of("\\/");
+    std::string directory = video_path.substr(0, pos + 1);
+    std::string filename = video_path.substr(pos + 1);
+
+    size_t ext_pos = filename.find_last_of(".");
+    std::string file_base = filename.substr(0, ext_pos);
+    std::string file_extension = filename.substr(ext_pos);
+
+    std::stringstream output_path;
+    output_path << directory << file_base << "_output" << file_extension;
+
+    cv::VideoWriter writer(output_path.str(), cv::VideoWriter::fourcc('X', 'V', 'I', 'D'), fps, cv::Size(frame_width, frame_height));
+    if (!writer.isOpened()) {
+        std::cerr << "Не удалось открыть VideoWriter для записи!" << std::endl;
+        return -1;
+    }
+
+    int choice;
+    std::cout << "Выберите, что нужно размывать:\n";
+    std::cout << "1 - Только лица\n";
+    std::cout << "2 - Только номера машин\n";
+    std::cout << "3 - Лица и номера машин\n";
+    std::cout << "4 - Лица и автомобили\n";
+    std::cout << "5 - Лица, номера машин и автомобили\n";
+    std::cout << "6 - Пешеходы\n";
+    std::cin >> choice;
+
+    if (choice < 1 || choice > 6) {
+        std::cerr << "Неверный выбор! Завершение программы." << std::endl;
+        return -1;
+    }
+
+    cv::Mat frame;
+    while (true) {
+        capture >> frame;
+        if (frame.empty()) break;
+
+        cv::Mat gray;
+        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+
+        if (choice == 1 || choice == 3 || choice == 4 || choice == 5) {
+            std::vector<cv::Rect> faces;
+            face_cascade.detectMultiScale(gray, faces, 1.1, 5, 0, cv::Size(30, 30));
+            for (auto& face : faces) {
+                cv::Mat face_roi = frame(face);
+                cv::GaussianBlur(face_roi, face_roi, cv::Size(55, 55), 30);
+            }
+        }
+
+        if (choice == 2 || choice == 3 || choice == 5) {
+            std::vector<cv::Rect> plates;
+            plate_cascade.detectMultiScale(gray, plates, 1.1, 5, 0, cv::Size(30, 10));
+            for (auto& plate : plates) {
+                cv::Mat plate_roi = frame(plate);
+                cv::GaussianBlur(plate_roi, plate_roi, cv::Size(55, 55), 30);
+            }
+        }
+
+        if (choice == 4 || choice == 5) {
+            std::vector<cv::Rect> cars;
+            car_cascade.detectMultiScale(gray, cars, 1.1, 5, 0, cv::Size(30, 30));
+            for (auto& car : cars) {
+                cv::Mat car_roi = frame(car);
+                cv::GaussianBlur(car_roi, car_roi, cv::Size(55, 55), 30);
+            }
+        }
+
+        if (choice == 6) {
+            std::vector<cv::Rect> pedestrians;
+            pedestrian_cascade.detectMultiScale(gray, pedestrians, 1.1, 5, 0, cv::Size(30, 30));
+            for (auto& pedestrian : pedestrians) {
+                cv::Mat pedestrian_roi = frame(pedestrian);
+                cv::GaussianBlur(pedestrian_roi, pedestrian_roi, cv::Size(55, 55), 30);
+            }
+        }
+
+        writer.write(frame);
+
+        cv::imshow("Processed Video", frame);
+
+        if (cv::waitKey(1) == 'q') break;
+    }
+
+    capture.release();
+    writer.release();
+    cv::destroyAllWindows();
+
+    std::cout << "Обработанное видео сохранено как: " << output_path.str() << std::endl;
+    return 0;
+}
